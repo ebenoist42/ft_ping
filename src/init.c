@@ -6,7 +6,7 @@
 /*   By: ebenoist <ebenoist@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/06/18 14:11:35 by ebenoist          #+#    #+#             */
-/*   Updated: 2026/06/20 13:46:51 by ebenoist         ###   ########.fr       */
+/*   Updated: 2026/06/20 15:20:05 by ebenoist         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -43,7 +43,18 @@ void build_packet(char *packet, int seq)
     icmp_hdr->checksum = checksum(packet, PACKET_SIZE);
 }
 
-int receive_packet(int sock, struct sockaddr_in *dest, int seq, char *str)
+
+static void calcule_rtt_time(double rtt, t_rttTime *stats)
+{
+    if(rtt > stats->max)
+        stats->max = rtt;
+    if(rtt < stats->min)
+        stats->min = rtt;
+    stats->sum += rtt;
+    stats->sum2 += rtt * rtt; 
+}   
+
+int receive_packet(int sock, struct sockaddr_in *dest, int seq, char *str, t_rttTime *stats)
 {
     char            buffer[1024];
     ssize_t         received;
@@ -71,10 +82,11 @@ int receive_packet(int sock, struct sockaddr_in *dest, int seq, char *str)
         rtt = (now.tv_sec - sent_time->tv_sec) * 1000.0
             + (now.tv_usec - sent_time->tv_usec) / 1000.0;
         if(seq == 0)
-            printf("PING %s (%s): %d data bytes.\n", str, inet_ntoa(dest->sin_addr), PACKET_SIZE - 8);
+            printf("PING %s (%s): %d data bytes\n", str, inet_ntoa(dest->sin_addr), PACKET_SIZE - 8);
         printf("%zd bytes from %s: icmp_seq=%d ttl=%d time=%.3f ms\n",
            received - ip_len, inet_ntoa(dest->sin_addr),
            seq, ip_hdr->ip_ttl, rtt);
+        calcule_rtt_time(rtt, stats);
         return(1);
     }
     else if (icmp->type == ICMP_TIME_EXCEEDED)
