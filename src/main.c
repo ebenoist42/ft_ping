@@ -6,7 +6,7 @@
 /*   By: ebenoist <ebenoist@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/06/18 12:07:49 by ebenoist          #+#    #+#             */
-/*   Updated: 2026/06/18 19:12:57 by ebenoist         ###   ########.fr       */
+/*   Updated: 2026/06/20 13:45:50 by ebenoist         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -34,23 +34,26 @@ int main (int ac, char **av)
     if(check_dns(&adresse, &hints, av[1]))
         close_programme('\0', sock, adresse);
     struct sockaddr_in *dest = (struct sockaddr_in *)adresse->ai_addr;
-    char reverse_dns[NI_MAXHOST];
-    ft_reverse_dns(dest, reverse_dns);
-    int seq = 1;
+    int seq = 0;
+    int received = 0;
     char pack_icmp[PACKET_SIZE];
     signal(SIGINT, handler);
+    int send = 0;
     while(running)
     {
         build_packet(pack_icmp, seq);
         ssize_t sent = sendto(sock, pack_icmp, PACKET_SIZE, 0,
                         (struct sockaddr *)dest, sizeof(*dest));
+        send++;
         if(sent < 0)
             close_programme("Error : sendto ", sock, adresse);
-        receive_packet(sock, dest, seq, reverse_dns);
+        if (receive_packet(sock, dest, seq, av[1]))
+            received++;
         seq++;
         sleep(1);
     }
-
+    printf("--- %s ping statistics ---\n", av[1]);
+    printf("%d packets transmitted, %d packets received, %d packet loss\n ", send, received, ((send - received) * 100 / send));
     close_programme('\0', sock, adresse);
     return(0);
     

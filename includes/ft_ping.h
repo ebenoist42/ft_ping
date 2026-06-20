@@ -18,7 +18,7 @@
 
 int check_dns(struct addrinfo **adresse, struct addrinfo *hints, char *str);
 void build_packet(char *packet, int seq);
-void receive_packet(int sock, struct sockaddr_in *dest, int seq, char *reverse_dns);
+int receive_packet(int sock, struct sockaddr_in *dest, int seq, char *str);
 int creat_sock();
 unsigned short checksum(void *b, int len);
 void close_programme(char *str, int sock, struct addrinfo *adresse);

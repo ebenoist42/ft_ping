@@ -6,7 +6,7 @@
 /*   By: ebenoist <ebenoist@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/06/18 18:55:16 by ebenoist          #+#    #+#             */
-/*   Updated: 2026/06/18 19:05:32 by ebenoist         ###   ########.fr       */
+/*   Updated: 2026/06/20 13:30:50 by ebenoist         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -50,13 +50,5 @@ int     check_dns(struct addrinfo **adresse, struct addrinfo *hints, char *str)
         printf("Error : name  invalide\n");
         return(1);
     }
-    printf("Ip found\n");
     return(0);
-}
-
-void ft_reverse_dns(struct sockaddr_in *dest, char *hostname)
-{
-    if (getnameinfo((struct sockaddr *)dest, sizeof(*dest),
-                    hostname, NI_MAXHOST, NULL, 0, 0) != 0)
-        strcpy(hostname, inet_ntoa(dest->sin_addr));  // fallback : IP brute si pas de reverse
 }

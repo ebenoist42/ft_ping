@@ -6,7 +6,7 @@
 /*   By: ebenoist <ebenoist@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/06/18 14:11:35 by ebenoist          #+#    #+#             */
-/*   Updated: 2026/06/18 19:18:42 by ebenoist         ###   ########.fr       */
+/*   Updated: 2026/06/20 13:46:51 by ebenoist         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -24,11 +24,7 @@ int creat_sock()
     tv.tv_sec = 1;
     tv.tv_usec = 0;
     if (setsockopt(sock, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv)) < 0) // cree une regle de temp mac d'attente pour ce socket, until dans recvfrom, attente max 1s
-    {
-        perror("Error : setsockopt");
-        close(sock);
-        exit(1);
-    }
+        close_programme("Error : ", sock, NULL);
     return(sock);
 }
 
@@ -47,7 +43,7 @@ void build_packet(char *packet, int seq)
     icmp_hdr->checksum = checksum(packet, PACKET_SIZE);
 }
 
-void receive_packet(int sock, struct sockaddr_in *dest, int seq, char *reverse_dns)
+int receive_packet(int sock, struct sockaddr_in *dest, int seq, char *str)
 {
     char            buffer[1024];
     ssize_t         received;
@@ -57,12 +53,11 @@ void receive_packet(int sock, struct sockaddr_in *dest, int seq, char *reverse_d
     struct timeval  now;
     int             ip_len;
     double          rtt;
-
     received = recvfrom(sock, buffer, sizeof(buffer), 0, NULL, NULL);
     if (received < 0)
     {
         printf("Request timeout for icmp_seq %d\n", seq);
-        return;
+        return(0);
     }
     ip_hdr = (struct ip *)buffer;
     ip_len = ip_hdr->ip_hl * 4;                      // taille du header IP à sauter
@@ -75,11 +70,15 @@ void receive_packet(int sock, struct sockaddr_in *dest, int seq, char *reverse_d
         gettimeofday(&now, NULL);
         rtt = (now.tv_sec - sent_time->tv_sec) * 1000.0
             + (now.tv_usec - sent_time->tv_usec) / 1000.0;
-        printf("%zd bytes from %s (%s): icmp_seq=%d ttl=%d time=%.1f ms\n",
-           received - ip_len, reverse_dns, inet_ntoa(dest->sin_addr),
-           ntohs(icmp->un.echo.sequence), ip_hdr->ip_ttl, rtt);
+        if(seq == 0)
+            printf("PING %s (%s): %d data bytes.\n", str, inet_ntoa(dest->sin_addr), PACKET_SIZE - 8);
+        printf("%zd bytes from %s: icmp_seq=%d ttl=%d time=%.3f ms\n",
+           received - ip_len, inet_ntoa(dest->sin_addr),
+           seq, ip_hdr->ip_ttl, rtt);
+        return(1);
     }
     else if (icmp->type == ICMP_TIME_EXCEEDED)
         printf("From %s icmp_seq=%d Time to live exceeded\n",
                inet_ntoa(dest->sin_addr), seq);
+    return(0);
 }
