@@ -6,13 +6,47 @@
 /*   By: ebenoist <ebenoist@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/06/18 14:11:35 by ebenoist          #+#    #+#             */
-/*   Updated: 2026/06/20 15:20:05 by ebenoist         ###   ########.fr       */
+/*   Updated: 2026/06/21 21:26:20 by ebenoist         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
 #include "../includes/ft_ping.h"
 
-int creat_sock()
+int init_flag(int ac, char **av)
+{
+    if(ac == 2)
+        return(0);
+    if(ac == 3)
+    {
+        if (strcmp(av[1], "-v") == 0)
+            return(1);
+        if (strcmp(av[1], "-?") == 0)
+        {
+            print_flag();
+            return(-1);
+        }
+    }
+    printf( "invalid option -- '%s'\nTry 'ping --help' or 'ping --usage' for more information.\n", av[2]);
+        return(-1);
+}
+
+char *init_str(int ac, char **av)
+{
+    char *str;
+    if(ac == 2)
+    {
+        str = malloc(strlen(av[1]) + 1);
+        strcpy(str, av[1]);
+    }
+    else
+    {
+        str = malloc(strlen(av[2]) + 1);
+        strcpy(str, av[2]);
+    }
+    return(str);
+}
+
+int creat_sock(char *param)
 {
     int sock = socket(AF_INET, SOCK_RAW, IPPROTO_ICMP);
     if(sock < 0)
@@ -24,7 +58,7 @@ int creat_sock()
     tv.tv_sec = 1;
     tv.tv_usec = 0;
     if (setsockopt(sock, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv)) < 0) // cree une regle de temp mac d'attente pour ce socket, until dans recvfrom, attente max 1s
-        close_programme("Error : ", sock, NULL);
+        close_programme("Error : ", sock, NULL, param);
     return(sock);
 }
 
@@ -35,14 +69,13 @@ void build_packet(char *packet, int seq)
     memset(packet, 0, PACKET_SIZE);
     icmp_hdr->type = ICMP_ECHO;
     icmp_hdr->code = 0;
-    icmp_hdr->un.echo.id = htons(getpid() & 0xFFFF); 
+    icmp_hdr->un.echo.id = htons(getpid() & 0xFFFF);
     icmp_hdr->un.echo.sequence = htons(seq);
     icmp_hdr->checksum = 0;
     struct timeval *tv = (struct timeval *)(packet + sizeof(struct icmphdr));
     gettimeofday(tv, NULL);
     icmp_hdr->checksum = checksum(packet, PACKET_SIZE);
 }
-
 
 static void calcule_rtt_time(double rtt, t_rttTime *stats)
 {
@@ -54,7 +87,7 @@ static void calcule_rtt_time(double rtt, t_rttTime *stats)
     stats->sum2 += rtt * rtt; 
 }   
 
-int receive_packet(int sock, struct sockaddr_in *dest, int seq, char *str, t_rttTime *stats)
+int receive_packet(int sock, struct sockaddr_in *dest, int seq, char *param, t_rttTime *stats, int flags)
 {
     char            buffer[1024];
     ssize_t         received;
@@ -64,33 +97,42 @@ int receive_packet(int sock, struct sockaddr_in *dest, int seq, char *str, t_rtt
     struct timeval  now;
     int             ip_len;
     double          rtt;
-    received = recvfrom(sock, buffer, sizeof(buffer), 0, NULL, NULL);
-    if (received < 0)
+    while (1)
     {
-        printf("Request timeout for icmp_seq %d\n", seq);
+        received = recvfrom(sock, buffer, sizeof(buffer), 0, NULL, NULL);
+        if (received < 0)
+        {
+            printf("Request timeout for icmp_seq %d\n", seq);
+            return(0);
+        }
+        ip_hdr = (struct ip *)buffer;
+        ip_len = ip_hdr->ip_hl * 4;                      // taille du header IP à sauter
+        icmp = (struct icmphdr *)(buffer + ip_len);       // début du header ICMP
+        if (icmp->type == ICMP_ECHOREPLY
+          && ntohs(icmp->un.echo.id) == (getpid() & 0xFFFF)) // convertis reseau vers machine
+        {
+            sent_time = (struct timeval *)(buffer + ip_len + sizeof(struct icmphdr));
+            gettimeofday(&now, NULL);
+            rtt = (now.tv_sec - sent_time->tv_sec) * 1000.0
+                + (now.tv_usec - sent_time->tv_usec) / 1000.0;
+            if (seq == 0 && flags == 1)
+            {
+                printf("PING %s (%s): %d data bytes, id=0x%04x = %d\n", param, inet_ntoa(dest->sin_addr), PACKET_SIZE - 8, ntohs(icmp->un.echo.id),
+                    ntohs(icmp->un.echo.id));
+            }
+            else if(seq == 0)
+                printf("PING %s (%s): %d data bytes\n", param, inet_ntoa(dest->sin_addr), PACKET_SIZE - 8);
+            printf("%zd bytes from %s: icmp_seq=%d ttl=%d time=%.3f ms\n",
+            received - ip_len, inet_ntoa(dest->sin_addr),
+            seq, ip_hdr->ip_ttl, rtt);
+            calcule_rtt_time(rtt, stats);
+            return(1);
+        }
+        else if (icmp->type == ICMP_TIME_EXCEEDED)
+        {
+            printf("From %s icmp_seq=%d Time to live exceeded\n",
+                inet_ntoa(dest->sin_addr), seq);
         return(0);
+        }
     }
-    ip_hdr = (struct ip *)buffer;
-    ip_len = ip_hdr->ip_hl * 4;                      // taille du header IP à sauter
-    icmp = (struct icmphdr *)(buffer + ip_len);       // début du header ICMP
-
-    if (icmp->type == ICMP_ECHOREPLY
-        && ntohs(icmp->un.echo.id) == (getpid() & 0xFFFF))
-    {
-        sent_time = (struct timeval *)(buffer + ip_len + sizeof(struct icmphdr));
-        gettimeofday(&now, NULL);
-        rtt = (now.tv_sec - sent_time->tv_sec) * 1000.0
-            + (now.tv_usec - sent_time->tv_usec) / 1000.0;
-        if(seq == 0)
-            printf("PING %s (%s): %d data bytes\n", str, inet_ntoa(dest->sin_addr), PACKET_SIZE - 8);
-        printf("%zd bytes from %s: icmp_seq=%d ttl=%d time=%.3f ms\n",
-           received - ip_len, inet_ntoa(dest->sin_addr),
-           seq, ip_hdr->ip_ttl, rtt);
-        calcule_rtt_time(rtt, stats);
-        return(1);
-    }
-    else if (icmp->type == ICMP_TIME_EXCEEDED)
-        printf("From %s icmp_seq=%d Time to live exceeded\n",
-               inet_ntoa(dest->sin_addr), seq);
-    return(0);
 }

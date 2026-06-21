@@ -24,13 +24,15 @@ typedef struct s_rttTime
     double sum2;
 }   t_rttTime;
 
+int init_flag(int ac, char **av);
+char *init_str(int ac, char **av);
 int check_dns(struct addrinfo **adresse, struct addrinfo *hints, char *str);
 void build_packet(char *packet, int seq);
-int receive_packet(int sock, struct sockaddr_in *dest, int seq, char *str, t_rttTime *stats);
-int creat_sock();
+int receive_packet(int sock, struct sockaddr_in *dest, int seq, char *param, t_rttTime *stats, int flags);
+int creat_sock(char *param);
 unsigned short checksum(void *b, int len);
-void close_programme(char *str, int sock, struct addrinfo *adresse);
+void close_programme(char *str, int sock, struct addrinfo *adresse, char *param);
 void ft_reverse_dns(struct sockaddr_in *dest, char *hostname); 
-
+void    print_flag();
 
 #endif
